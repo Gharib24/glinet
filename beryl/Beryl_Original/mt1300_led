@@ -1,0 +1,70 @@
+#!/bin/sh
+#No led3
+#if the value of the brightness is 1,Can't control LED
+
+echo 0 > /sys/class/leds/gl-mt1300:blue/brightness
+echo 0 > /sys/class/leds/gl-mt1300:white/brightness
+if [ "$2" != "daemon" ];then
+    i2cset  -f -y 0 0x30 0x00 0x1F  #reset
+    i2cset  -f -y 0 0x30 0x00 0x1A  #mode3
+fi
+
+i2cset  -f -y 0 0x30 0x06 0x3f
+i2cset  -f -y 0 0x30 0x07 0x7f
+
+case $1 in
+    blue | white | both )
+        if [ $1 = "blue" ]; then
+            i2cset  -f -y 0 0x30 0x04 0x01
+        elif [ $1 = "white" ];then
+            i2cset  -f -y 0 0x30 0x04 0x04
+        elif [ $1 = "both" ];then
+            i2cset  -f -y 0 0x30 0x04 0x05
+        fi
+    ;;
+    blue_flash | white_flash | both_flash )
+        #flashing
+	
+        [ "$2" == "fast" ] && i2cset  -f -y 0 0x30 0x01 0x01  #period : 0.256s
+        [ "$2" == "medium" ] && i2cset  -f -y 0 0x30 0x01 0x03  #period : 0.512s
+        [ -z "$2" -o "$2" == "normal" ] && i2cset  -f -y 0 0x30 0x01 0x07  #period : 1.024s
+        i2cset  -f -y 0 0x30 0x02 0x7f  #Percentage of Period[%]
+        if [ $1 = "blue_flash" ]; then
+            i2cset  -f -y 0 0x30 0x04 0x02
+        elif [ $1 = "white_flash" ];then
+            i2cset  -f -y 0 0x30 0x04 0x08
+        elif [ $1 = "both_flash" ];then
+            i2cset  -f -y 0 0x30 0x04 0x0A
+        fi
+    ;;
+    blue_breath | white_breath | both_breath )
+        #breath
+        i2cset  -f -y 0 0x30 0x01 0x20  #period : 4.096s
+        i2cset  -f -y 0 0x30 0x02 0x7f  #Percentage of Period[100/0xff]%
+        i2cset  -f -y 0 0x30 0x05 0xFF  #ramp time : 768ms
+        if [ $1 = "blue_breath" ]; then
+            i2cset  -f -y 0 0x30 0x04 0x02
+        elif [ $1 = "white_breath" ];then
+            i2cset  -f -y 0 0x30 0x04 0x08
+        elif [ $1 = "both_breath" ];then
+            i2cset  -f -y 0 0x30 0x04 0x0A
+        fi
+    ;;
+    off )
+        i2cset  -f -y 0 0x30 0x04 0x00
+    ;;
+    *)
+        echo "Usage: ./mt1300_led <option>"
+        echo "Option:"
+        echo "      off"
+        echo "      blue"
+        echo "      white"
+        echo "      both"
+        echo "      blue_flash <normal|medium|fast>"
+        echo "      white_flash <normal|medium|fast>"
+        echo "      both_flash <normal|medium|fast>"
+        echo "      blue_breath"
+        echo "      white_breath"
+        echo "      both_breath"
+    ;;
+esac
