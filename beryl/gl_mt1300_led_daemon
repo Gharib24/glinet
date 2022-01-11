@@ -1,0 +1,124 @@
+#!/bin/sh
+
+status="0"
+count=`uci get mwan3.wan.count 2>/dev/null`
+timeout=`uci get mwan3.wan.timeout 2>/dev/null`
+track_ip=`uci get mwan3.wan.track_ip 2>/dev/null`
+[ -z "$count" ] && count="1"
+[ -z "$timeout" ] && timeout="2"
+[ -z "$track_ip" ] && track_ip="8.8.4.4 8.8.8.8 208.67.222.222 208.67.220.220"
+
+mt1300_led off
+mt1300_led blue_breath daemon
+
+for ip in $track_ip;
+do
+	ping -c $count -W $timeout -q $ip 1>/dev/null
+	ret=`echo $?`
+	if [ "$ret" = "0" ];then
+		status="1"
+		break
+	fi
+done
+
+while true
+do
+	# Device is still booting or has an issue
+	if [ "$status" = "0" ]; then
+		mt1300_led blue_breath daemon
+	# Device is operational, add in custom settings
+	else
+		#currenttime=$(date -u +%H:%M)		# Return HH:MM string
+		currenttime=$(date -u +%H)
+		# If it's time for sleep (UTC), turn the LEDs off
+		#if [ "$currenttime" >= "12:00" ] && [ "$currenttime" < "22:00" ]; then
+		if [ "$currenttime" -ge "12" ] && [ "$currenttime" -lt "22" ]; then
+			mt1300_led off
+		# It's not sleep time, so let there be light!
+		else
+			# OpenVPN or Wireguard exists, white breath
+			if [ -d /sys/class/net/tun* ] || [ -d /sys/class/net/wg* ]; then
+				mt1300_led white_breath daemon	
+			# No VPN.  Normal operations, normal white
+			else
+				mt1300_led white daemon
+			fi
+		fi
+	fi
+
+	sleep 5
+
+	#mwan3 will not be used in the AP/WDS mode
+	mode=`uci -q get glconfig.bridge.mode`
+	if [ "$mode" = "ap" -o "$mode" = "wds" ];then
+		[ "$status" = 1 ] && sleep 10
+		for ip in $track_ip;
+		do
+			ping -c $count -W $timeout -q $ip 1>/dev/null
+			ret=`echo $?`
+			if [ "$ret" = "0" ];then
+				status="1"
+				break
+			else
+				status="0"
+			fi
+		done
+		continue
+	fi
+	
+
+	if [ "$status" = "0" ];then
+		interface=`get_wan_interface`
+		if [ -z "$interface" ];then
+			continue
+		fi
+
+		for ip in $track_ip;
+		do
+			ping -c $count -W $timeout -q $ip 1>/dev/null
+			ret=`echo $?`
+			if [ "$ret" = "0" ];then
+				status="1"
+				break
+			fi
+		done
+	else
+		interface=`get_wan_interface`
+		if [ -z "$interface" ];then
+			status="0"
+			continue
+		fi
+		
+		mwan3_status=`mwan3 policies | grep "Current ipv4 policies:" -A 2 | tail -n 1 | sed 's/ //g' 2>/dev/null`
+		if [ "$mwan3_status" = "default" ];then
+			for ip in $track_ip;
+			do
+				ping -c $count -W $timeout -q $ip 1>/dev/null
+				ret=`echo $?`
+				if [ "$ret" = "0" ];then
+					status="1"
+					break
+				else
+					status="0"
+				fi
+			done
+			continue
+		fi
+
+		mwan3_interface=`echo $mwan3_status | awk -F \( '{print $1}' 2>/dev/null`
+		check=`echo $interface | grep $mwan3_interface 2>/dev/null`
+		if [ -z "$check" ];then
+			for ip in $track_ip;
+			do
+				ping -c $count -W $timeout -q $ip 1>/dev/null
+				ret=`echo $?`
+				if [ "$ret" = "0" ];then
+					status="1"
+					break
+				else
+					status="0"
+				fi
+			done
+		fi	
+	fi
+done
