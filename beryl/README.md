@@ -1,7 +1,7 @@
 # Beryl (GL-MT1300)  
 https://www.gl-inet.com/products/gl-mt1300/  
 
-These two script modifications were based on release 3.203.  
+These two script modifications were based on release 3.203. This continues to work for 3.211, no changes, just replace the existing file.  
 
 ## Overview  
 `mt1300_led` - Script that controls the LED itself via `i2cset` commands.  I've added a brightness section (and math) instead of leaving the hard coded 100% brightness.  
